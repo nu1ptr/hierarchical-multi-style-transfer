@@ -1,0 +1,3 @@
+*.pyc
+vgg16/*
+!vgg16/.gitkeep
