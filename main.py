@@ -1,8 +1,22 @@
 import tensorflow as tf
+import progressbar
 import numpy as np
 import vgg16 as net
 import sys
 import cv2
+import time
+import PIL.Image
+
+# Tensorflow flags
+flags = tf.app.flags
+FLAGS = flags.FLAGS
+flags.DEFINE_string('content', '../data/content/geisel.jpg', 'Content Image')
+flags.DEFINE_string('style', '../data/styles/sketch.png', 'Style Image')
+flags.DEFINE_integer('iterations', 100, 'Number iterations')
+flags.DEFINE_integer('resize', -1, 'Resize to square')
+flags.DEFINE_float('weight_content', 1.5, 'Weight Style')
+flags.DEFINE_float('weight_style', 10.0, 'Weight Content')
+flags.DEFINE_float('weight_denoise', 0.3, 'Weight Denoise')
 
 # Get directory of our vgg net
 net.data_dir = 'vgg16/'
@@ -27,8 +41,12 @@ def create_content_loss(session, model, content_image, layer_ids):
         layer_losses = []
 
         for value, layer in zip(values, layers):
+            # You're getting the values when you run the content image through here
             value_const = tf.constant(value)
-            value = mean_squared_error(layer, value_const)
+
+            # Calculate the loss between your value and layer
+            loss = mean_squared_error(layer, value_const)
+            layer_losses.append(loss)
 
         total_loss = tf.reduce_mean(layer_losses)
 
@@ -89,13 +107,11 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
     model = net.VGG16()
     session = tf.InteractiveSession(graph=model.graph)
 
+    # Print Layers
     print("Content Layers:")
     print(model.get_layer_names(content_layer_ids))
-    print()
-
     print("Style layers:")
     print(model.get_layer_names(style_layer_ids))
-    print()
 
     # Loss functions
     loss_content = create_content_loss(session=session,model=model, content_image=content_image,
@@ -104,6 +120,7 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
                                         layer_ids=style_layer_ids)
     loss_denoise = create_denoise_loss(model)
 
+    # Adjustment variables
     adj_content = tf.Variable(1e-10, name='adj_content')
     adj_style = tf.Variable(1e-10, name='adj_style')
     adj_denoise = tf.Variable(1e-10, name='adj_denoise')
@@ -113,8 +130,9 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
 
     # Avoid division by zero and get inverse of loss
     update_adj_content = adj_content.assign(1.0 / (loss_content + 1e-10))
-    update_adj_style = adj_style.assign(1.0 / (loss_style+ 1e-10))
+    update_adj_style = adj_style.assign(1.0 / (loss_style + 1e-10))
     update_adj_denoise = adj_denoise.assign(1.0 / (loss_denoise + 1e-10))
+
 
     # Combine all the losses together
     loss_combine =  weight_content * adj_content * loss_content + \
@@ -130,10 +148,12 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
     mixed_image = np.random.rand(*content_image.shape) + 128
 
     # Iterate over this mixed image
-    for i in range(num_iterations):
+    start = time.time()
+    bar = progressbar.ProgressBar()
+    for i in bar(range(num_iterations)):
         feed_dict = model.create_feed_dict(image=mixed_image)
 
-        # Get values
+        # Get update values
         grad, adj_content_val, adj_style_val, adj_denoise_val = session.run(run_list, feed_dict=feed_dict)
         grad = np.squeeze(grad)
 
@@ -144,11 +164,9 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
         mixed_image -= grad * step_size_scaled
 
         mixed_image = np.clip(mixed_image, 0.0, 255.0)
+    end = time.time()
 
-        # Display
-        if(i % 10 == 0) or (i == num_iterations - 1):
-            #cv2.imshow('Intermediate', mixed_image)
-            print(i)
+    print("Computation time: %f" % (end - start))
 
     # Close session
     session.close()
@@ -157,19 +175,27 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
 
 # Run Style Transfer
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print('INVALID INPUT: ./' + sys.argv[0] + ' <content_dir> <style_dir>\n')
+    # Define parameters for style transfer
+    content_filename = FLAGS.content
+    style_filename = FLAGS.style
 
-    content_filename = sys.argv[1]
-    style_filename = sys.argv[2]
+    # Image pre-processing
+    content = np.float32(cv2.cvtColor(cv2.imread(content_filename), cv2.COLOR_BGR2RGB))
+    style = np.float32(cv2.cvtColor(cv2.imread(style_filename),cv2.COLOR_BGR2RGB))
 
-    content = cv2.cvtColor(cv2.imread(content_filename), cv2.COLOR_BGR2RGB)
-    style = cv2.cvtColor(cv2.imread(style_filename),cv2.COLOR_BGR2RGB)
+    if FLAGS.resize > 0:
+        content = cv2.resize(content, (FLAGS.resize, FLAGS.resize))
 
-    # Display content
-    #cv2.imshow('a', cv2.cvtColor(content, cv2.COLOR_RGB2BGR))
-    #cv2.waitKey(0)
+    # Define your loss layer locations
+    content_layers = [4]
+    style_layers = list(range(13))
 
-    mixed = style_transfer(content, style, [4], list(range(13)),num_iterations=100)
-    cv2.imshow('Mixed', cv2.cvtColor(mixed.astype(np.uint8), cv2.COLOR_RGB2BGR))
+
+    mixed = style_transfer(content, style, content_layers, style_layers,
+                            weight_content= FLAGS.weight_content,
+                            weight_style= FLAGS.weight_style,
+                            weight_denoise= FLAGS.weight_denoise,
+                            num_iterations= FLAGS.iterations)
+
+    cv2.imshow('Mixed', cv2.cvtColor(mixed.astype(np.uint8),cv2.COLOR_RGB2BGR))
     cv2.waitKey(0)

@@ -4,3 +4,5 @@
 * opencv2
 * numpy
 * tensorflow
+* progressbar2
+* vgg16
