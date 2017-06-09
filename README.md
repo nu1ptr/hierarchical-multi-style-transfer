@@ -1,6 +1,6 @@
-## Style Transfer Experimentation
+# Style Transfer Experimentation
 
-# Dependencies
-. opencv2
-. numpy
-. tensorflow
+## Dependencies
+* opencv2
+* numpy
+* tensorflow
