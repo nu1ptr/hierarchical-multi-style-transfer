@@ -1,3 +1,7 @@
 *.pyc
 vgg16/*
+resnet/*
+caffe-tensorflow/*
+__pycache__/*
 !vgg16/.gitkeep
+!resnet/.gitkeep
