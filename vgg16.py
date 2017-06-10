@@ -25,14 +25,10 @@ data_dir = "vgg16/"
 
 # File containing the TensorFlow graph definition. (Downloaded)
 path_graph_def = "vgg16.tfmodel"
-
-
+#Download the VGG16 model from the internet if it does not already
+#exist in the data_dir. The file is about 550 MB.
 
 def maybe_download():
-    """
-    Download the VGG16 model from the internet if it does not already
-    exist in the data_dir. The file is about 550 MB.
-    """
 
     print("Downloading VGG16 Model ...")
 
@@ -100,6 +96,10 @@ class VGG16:
             # Get references to the tensors for the commonly used layers.
             self.layer_tensors = [self.graph.get_tensor_by_name(name + ":0") for name in self.layer_names]
 
+            # For debugging purposes
+
+        return
+
     def get_layer_tensors(self, layer_ids):
         """
         Return a list of references to the tensors for the layers with the given id's.
@@ -163,3 +163,7 @@ class VGG16:
             feed_dict = {self.tensor_name_input_image: image}
 
         return feed_dict
+
+# testing
+if __name__ == "__main__":
+    model = VGG16()
