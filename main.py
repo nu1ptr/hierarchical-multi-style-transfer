@@ -5,7 +5,6 @@ import vgg16 as net
 import sys
 import cv2
 import time
-import PIL.Image
 
 # Tensorflow flags
 flags = tf.app.flags
@@ -13,7 +12,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('content', '../data/content/geisel.jpg', 'Content Image')
 flags.DEFINE_string('style', '../data/styles/sketch.png', 'Style Image')
 flags.DEFINE_integer('iterations', 100, 'Number iterations')
-flags.DEFINE_integer('resize', -1, 'Resize to square')
+flags.DEFINE_integer('resize', -1, 'Resize to according to height')
 flags.DEFINE_float('weight_content', 1.5, 'Weight Style')
 flags.DEFINE_float('weight_style', 10.0, 'Weight Content')
 flags.DEFINE_float('weight_denoise', 0.3, 'Weight Denoise')
@@ -45,6 +44,7 @@ def create_content_loss(session, model, content_image, layer_ids):
             value_const = tf.constant(value)
 
             # Calculate the loss between your value and layer
+            # Compare between two feature maps
             loss = mean_squared_error(layer, value_const)
             layer_losses.append(loss)
 
@@ -133,7 +133,6 @@ def style_transfer(content_image, style_image, content_layer_ids, style_layer_id
     update_adj_style = adj_style.assign(1.0 / (loss_style + 1e-10))
     update_adj_denoise = adj_denoise.assign(1.0 / (loss_denoise + 1e-10))
 
-
     # Combine all the losses together
     loss_combine =  weight_content * adj_content * loss_content + \
                     weight_style * adj_style * loss_style + \
@@ -184,12 +183,12 @@ if __name__ == '__main__':
     style = np.float32(cv2.cvtColor(cv2.imread(style_filename),cv2.COLOR_BGR2RGB))
 
     if FLAGS.resize > 0:
-        content = cv2.resize(content, (FLAGS.resize, FLAGS.resize))
+        ratio = float(content.shape[1]) / content.shape[0]
+        content = cv2.resize(content, (int(FLAGS.resize*ratio), FLAGS.resize))
 
     # Define your loss layer locations
-    content_layers = [4]
+    content_layers = [5]
     style_layers = list(range(13))
-
 
     mixed = style_transfer(content, style, content_layers, style_layers,
                             weight_content= FLAGS.weight_content,

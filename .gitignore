@@ -1,3 +1,6 @@
 *.pyc
 vgg16/*
+resnet/*
+__pycache__/*
 !vgg16/.gitkeep
+!resnet/.gitkeep
