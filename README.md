@@ -7,3 +7,4 @@
 * progressbar2
 * vgg16
 * ResNet
+* AlexNet

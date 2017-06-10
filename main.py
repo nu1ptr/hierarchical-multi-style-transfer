@@ -4,11 +4,14 @@
 import tensorflow as tf
 import progressbar
 import numpy as np
-import vgg16
-import resnet
 import sys
 import cv2
 import time
+
+# Different Network Architectures
+import vgg16
+import alexnet
+import resnet
 
 # Tensorflow flags
 flags = tf.app.flags
@@ -20,7 +23,7 @@ flags.DEFINE_integer('resize', -1, 'Resize to according to height')
 flags.DEFINE_float('weight_content', 1.5, 'Weight Style')
 flags.DEFINE_float('weight_style', 10.0, 'Weight Content')
 flags.DEFINE_float('weight_denoise', 0.3, 'Weight Denoise')
-flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, ResNet-L152, ResNet-L101, ResNet-L50')
+flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, AlexNet, ResNet-L152, ResNet-L101, ResNet-L50')
 
 # Get directories of our nets
 vgg16.data_dir = 'vgg16/'
@@ -106,6 +109,9 @@ def create_denoise_loss(model):
 
     return loss
 
+def transfer_network(session, model, content_image):
+    return
+
 def style_transfer(session, model, content_image, style_image, content_layer_ids, style_layer_ids,
                     weight_content=1.5, weight_style=10.0, weight_denoise=0.3,
                     num_iterations=100, step_size=10.0):
@@ -183,13 +189,11 @@ if __name__ == '__main__':
     content = np.float32(cv2.cvtColor(cv2.imread(content_filename), cv2.COLOR_BGR2RGB))
     style = np.float32(cv2.cvtColor(cv2.imread(style_filename),cv2.COLOR_BGR2RGB))
 
+
     if FLAGS.resize > 0:
         ratio = float(content.shape[1]) / content.shape[0]
         content = cv2.resize(content, (int(FLAGS.resize*ratio), FLAGS.resize))
 
-    # Define your loss layer locations
-    content_layers = [8]
-    style_layers = list(range(13))
 
     # Instantiate the models in a session
     if FLAGS.model == 'VGG16':
@@ -198,6 +202,15 @@ if __name__ == '__main__':
     elif 'ResNet' in FLAGS.model:
         sess = tf.Session()
         model = resnet.ResNet(sess, model=FLAGS.model)
+    elif 'AlexNet' == FLAGS.model:
+        sess = tf.Session()
+        content = cv2.resize(content, (227,227))
+        style = cv2.resize(style, (227,227))
+        model = alexnet.AlexNet(sess)
+
+    # Define your loss layer locations
+    content_layers = [3]
+    style_layers = list(range(len(model.layer_names)))
 
     # Run style transfer
     mixed = style_transfer(sess,  model, content, style, content_layers, style_layers,

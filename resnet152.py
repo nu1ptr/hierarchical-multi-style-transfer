@@ -2,7 +2,7 @@ import sys
 sys.path.insert(0, './caffe-tensorflow')
 from kaffe.tensorflow import Network
 
-class ResNet152(Network):
+class ResNet-152(Network):
     def setup(self):
         (self.feed('data')
              .conv(7, 7, 64, 2, 2, biased=False, relu=False, name='conv1')
@@ -577,13 +577,3 @@ class ResNet152(Network):
              .avg_pool(7, 7, 1, 1, padding='VALID', name='pool5')
              .fc(1000, relu=False, name='fc1000')
              .softmax(name='prob'))
-
-#testing
-import tensorflow as tf
-import numpy as np
-if __name__ == '__main__':
-    mixed_image = np.random.rand(128,128) + 128
-    net = ResNet152({'data':mixed_image})
-
-    with tf.Session() as sess:
-        net.load('./resnet/resnet152_weights.npy')
