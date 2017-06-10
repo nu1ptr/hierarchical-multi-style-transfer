@@ -28,6 +28,7 @@ flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, AlexNet, ResNet-L152, ResN
 # Get directories of our nets
 vgg16.data_dir = 'vgg16/'
 resnet.resnet_dir = 'resnet/'
+alexnet.alexnet_dir = 'alexnet/'
 
 # Calculate the mean squared error between content
 def mean_squared_error(a,b):
@@ -189,11 +190,10 @@ if __name__ == '__main__':
     content = np.float32(cv2.cvtColor(cv2.imread(content_filename), cv2.COLOR_BGR2RGB))
     style = np.float32(cv2.cvtColor(cv2.imread(style_filename),cv2.COLOR_BGR2RGB))
 
-
     if FLAGS.resize > 0:
         ratio = float(content.shape[1]) / content.shape[0]
         content = cv2.resize(content, (int(FLAGS.resize*ratio), FLAGS.resize))
-
+        style = cv2.resize(style, (content.shape[1], (content.shape[0])))
 
     # Instantiate the models in a session
     if FLAGS.model == 'VGG16':
@@ -204,12 +204,15 @@ if __name__ == '__main__':
         model = resnet.ResNet(sess, model=FLAGS.model)
     elif 'AlexNet' == FLAGS.model:
         sess = tf.Session()
-        content = cv2.resize(content, (227,227))
-        style = cv2.resize(style, (227,227))
         model = alexnet.AlexNet(sess)
+        # Image preprocessing for AlexNet
+        content = cv2.resize(content, (227,227)).astype(np.float32)
+        content = cv2.cvtColor(content, cv2.COLOR_RGB2BGR)
+        style = cv2.resize(style, (227,227)).astype(np.float32)
+        style = cv2.cvtColor(style, cv2.COLOR_RGB2BGR)
 
     # Define your loss layer locations
-    content_layers = [3]
+    content_layers = [4]
     style_layers = list(range(len(model.layer_names)))
 
     # Run style transfer
@@ -220,9 +223,12 @@ if __name__ == '__main__':
                             num_iterations= FLAGS.iterations)
 
     # Display results, make sure in BGR for cv2
-    cv2.imshow('Mixed', cv2.cvtColor(mixed.astype(np.uint8),cv2.COLOR_RGB2BGR))
-    cv2.waitKey(0)
+    if FLAGS.model != 'AlexNet':
+        cv2.imshow('Mixed', cv2.cvtColor(mixed.astype(np.uint8),cv2.COLOR_RGB2BGR))
+    else:
+        cv2.imshow('Mixed', mixed.astype(np.float32)/255.0)
 
+    sess.close()
+    cv2.waitKey(0)
     # Destroy Windows
     cv2.destroyAllWindows()
-    sess.close()

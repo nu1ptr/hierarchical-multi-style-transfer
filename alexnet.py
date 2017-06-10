@@ -9,7 +9,6 @@ alexnet_dir = "alexnet/"
 class AlexNet:
     tensor_name_input_image = "images:0"
 
-    xdim = (227,227,3)
     ydim = 1
 
     def __init__(self, sess):
@@ -22,7 +21,7 @@ class AlexNet:
         self.graph = sess.graph
 
         # Construct the graph now.
-        x = tf.placeholder(tf.float32, (None, ) + self.xdim, name='images')
+        x = tf.placeholder(tf.float32, [None, 227, 227, 3], name='images')
         #conv1
         #conv(11, 11, 96, 4, 4, padding='VALID', name='conv1')
         k_h = 11; k_w = 11; c_o = 96; s_h = 4; s_w = 4
@@ -86,6 +85,7 @@ class AlexNet:
         #max_pool(3, 3, 2, 2, padding='VALID', name='pool5')
         k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
         maxpool5 = tf.nn.max_pool(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+
         #fc6
         #fc(4096, name='fc6')
         fc6W = tf.Variable(net_data["fc6"][0])
@@ -105,7 +105,7 @@ class AlexNet:
         #softmax(name='prob'))
         prob = tf.nn.softmax(fc8)
 
-        init = tf.initialize_all_variables()
+        init = tf.global_variables_initializer()
         sess.run(init)
 
         # Get layer names and tensors
