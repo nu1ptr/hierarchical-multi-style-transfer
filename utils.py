@@ -1,5 +1,8 @@
 import tensorflow as tf
 import cv2
+import os
+import numpy as np
+import glob
 
 def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group=1):
     '''From https://github.com/ethereon/caffe-tensorflow
@@ -17,3 +20,7 @@ def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group
         output_groups = [convolve(i, k) for i,k in zip(input_groups, kernel_groups)]
         conv = tf.concat(output_groups, 3)          #tf.concat(3, output_groups)
     return  tf.reshape(tf.nn.bias_add(conv, biases), [-1]+conv.get_shape().as_list()[1:])
+
+def dir_2_dict(d):
+    return {os.path.splitext(os.path.basename(f))[0]: np.float32(cv2.cvtColor(cv2.imread(f),cv2.COLOR_BGR2RGB))
+            for f in glob.glob(d + '*')}

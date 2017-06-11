@@ -9,6 +9,7 @@ import cv2
 import time
 import glob
 import os
+import utils
 from functools import reduce
 
 # Different Network Architectures
@@ -20,11 +21,10 @@ import resnet
 # Tensorflow flags
 flags = tf.app.flags
 FLAGS = flags.FLAGS
-flags.DEFINE_string('content', '../data/content/geisel.jpg', 'Content Image')
+flags.DEFINE_string('contents', '../data/content/', 'Content Image Directory')
 flags.DEFINE_string('styles', '../data/styles/', 'Style Image Directory')
 flags.DEFINE_integer('iterations', 100, 'Number iterations')
 flags.DEFINE_integer('resize', -1, 'Resize to according to height')
-flags.DEFINE_float('weight_content', 1.0, 'Weight Style')
 flags.DEFINE_float('weight_denoise', 0.3, 'Weight Denoise')
 flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, AlexNet, ResNet-L152, ResNet-L101, ResNet-L50')
 
@@ -117,21 +117,22 @@ def create_denoise_loss(model):
 def transform_network(session, model, content_image):
     return
 
-def multi_style_transfer(session, model, content_image, style_images, content_layer_ids, style_layer_ids,
-                        weight_styles, weight_denoise=0.3, num_iterations=100, step_size=10.0, weight_content=1.0):
+def multi_style_transfer(session, model, content_images, style_images, content_layer_ids, style_layer_ids, weight_contents,
+                        weight_styles, weight_denoise=0.3, num_iterations=100, step_size=10.0):
     assert len(style_images) == len(style_layer_ids), "Mismatch between number of style images and number of subset style layers"
 
     # Print Layers
-    print("Content Layers:")
-    print(model.get_layer_names(content_layer_ids))
+    for i, layers in enumerate(content_layer_ids):
+        print("Content %d layers:" % i)
+        print(model.get_layer_names(layers))
 
     for i, layers in enumerate(style_layer_ids):
         print("Style %d layers:" % i)
         print(model.get_layer_names(layers))
 
     # Loss functions
-    loss_content = create_content_loss(session=session,model=model, content_image=content_image,
-                                        layer_ids=content_layer_ids)
+    loss_contents = [ create_content_loss(session=session, model=model, content_image=im, layer_ids=lays)
+                    for im, lays in zip(content_images, content_layer_ids) ]
 
     # Multi Style Loss
     loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays)
@@ -142,46 +143,53 @@ def multi_style_transfer(session, model, content_image, style_images, content_la
 
     # Adjustment variables
     with model.graph.as_default():
-        adj_content = tf.Variable(1e-10, name='adj_content')
+        adj_contents = [tf.Variable(1e-10, name='adj_content' + str(i)) for i in range(len(content_images))]
         adj_styles = [tf.Variable(1e-10, name='adj_style' + str(i)) for i in range(len(style_images))]
         adj_denoise = tf.Variable(1e-10, name='adj_denoise')
 
     # Initialize the adjustments
-    session.run([adj_content.initializer, adj_denoise.initializer] + [adj_sty.initializer for adj_sty in adj_styles])
+    session.run([adj_denoise.initializer] + \
+                [adj_con.initializer for adj_con in adj_contents] + \
+                [adj_sty.initializer for adj_sty in adj_styles])
 
     # Avoid division by zero and get inverse of loss
-    update_adj_content = adj_content.assign(1.0 / (loss_content + 1e-10))
+    update_adj_contents = [ adj_content.assign(1.0 / (loss_content + 1e-10)) for adj_content, loss_content in zip(adj_contents, loss_contents) ]
     update_adj_styles = [ adj_style.assign(1.0 / (loss_style + 1e-10)) for adj_style, loss_style in zip(adj_styles, loss_styles) ]
     update_adj_denoise = adj_denoise.assign(1.0 / (loss_denoise + 1e-10))
 
     # Combine style losses
-    loss_styles_combine = reduce(lambda a,b: a + b,[ w*a*l for w,a,l in zip(weight_styles, adj_styles, loss_styles)])
+    f = lambda a,b: a + b
+    loss_styles_combine = reduce(f,[ w*a*l for w,a,l in zip(weight_styles, adj_styles, loss_styles)])
+
+    # Combine content losses
+    loss_contents_combine = reduce(f,[ w*a*l for w,a,l in zip(weight_contents, adj_contents, loss_contents)])
 
     # Combine all the losses together
-    loss_combine =  weight_content * adj_content * loss_content + \
-                    loss_styles_combine + \
+    loss_combine =  loss_contents_combine + loss_styles_combine + \
                     weight_denoise * adj_denoise * loss_denoise
 
     # Minimize loss with random noise image
     gradient = tf.gradients(loss_combine, model.input)
 
-    run_list = [gradient, update_adj_content, update_adj_denoise] + update_adj_styles
+    run_list = [gradient, update_adj_denoise] + update_adj_contents + update_adj_styles
 
     # Initialize a mixed image
-    mixed_image = np.random.rand(*content_image.shape) + 128
+    mixed_image = np.random.rand(*content_images[0].shape) + 128
 
     # Iterate over this mixed image
     start = time.time()
     bar = progressbar.ProgressBar()
+
+    # Pretty much own gradient descent
     for i in bar(range(num_iterations)):
         feed_dict = model.create_feed_dict(image=mixed_image)
 
         # Get update values
         update_values = session.run(run_list, feed_dict=feed_dict)
         grad = update_values[0]
-        adj_content_val = update_values[1]
-        adj_denoise_val = update_values[2]
-        adj_style_vals = update_values[3:]
+        adj_denoise_val = update_values[1]
+        adj_content_val = update_values[2:len(content_images)]
+        adj_style_vals = update_values[len(content_images):]
 
         grad = np.squeeze(grad)
 
@@ -269,32 +277,36 @@ if __name__ == '__main__':
     ##################################################
     # Define parameters for style transfer and images
     ##################################################
-    content_filename = FLAGS.content
-
-    # Just load all the styles its easier that way
-    style_dir = FLAGS.styles
-
     # Image pre-processing
-    content = np.float32(cv2.cvtColor(cv2.imread(content_filename), cv2.COLOR_BGR2RGB))
-    styles = {os.path.splitext(os.path.basename(f))[0]: np.float32(cv2.cvtColor(cv2.imread(f),cv2.COLOR_BGR2RGB)) for f in glob.glob(style_dir + '*')}
+    contents = utils.dir_2_dict(FLAGS.contents)
+    styles = utils.dir_2_dict(FLAGS.styles)
+
+    for i, k in enumerate(contents):
+        print('Content %d loaded: %s' % (i, k))
     for i, k in enumerate(styles):
         print('Style %d loaded: %s' % (i, k))
 
     # Define your loss layer locations and styles
     # Messing around here
-    content_layers = [5]
+    content_layers = [[5]]
+    multi_content = [contents["oldboy"]]
+    weight_contents = [3,2]
+
     #style_layers = [[0,1,2,3,4],[5,6,7,8,9]]
     #multi_style = [styles["flowers"],styles["impression"]]
-    style_layers = [[0,1,2,3,4,5,6,7]]
-    multi_style = [styles["flowers"]]
-    weight_styles = [3]
+    style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
+    multi_style = [styles["flowers"], styles["polygon"]]
+    weight_styles = [4,3]
 
-    # Resize
+    # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
-        ratio = float(content.shape[1]) / content.shape[0]
-        content = cv2.resize(content, (int(FLAGS.resize*ratio), FLAGS.resize))
+        ratio = float(multi_content[0].shape[1]) / multi_content[0].shape[0]
+        multi_content[0] = cv2.resize(multi_content[0], (int(FLAGS.resize*ratio), FLAGS.resize))
+        for i in range(len(multi_content[1:])):
+            multi_content[i+1] = cv2.resize(multi_content[i+1], (multi_content[0].shape[1], multi_content[0].shape[0]))
+
         # This may be an issue with scaling...
-        multi_style = [cv2.resize(style, (content.shape[1], (content.shape[0]))) for style in multi_style]
+        multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
 
     ###########################################
     # Instantiate the models in a session
@@ -312,6 +324,7 @@ if __name__ == '__main__':
         # WARNING ONLY USE SINGLE STYLE FOR THIS
         sess = tf.Session()
         model = alexnet.AlexNet(sess)
+        print('This needs to be changed in code... Don\'t use this for now.')
         # Image preprocessing for AlexNet
         # If possible, try to make AlexNet FC
         content = cv2.resize(content, (227,227)).astype(np.float32)
@@ -322,15 +335,14 @@ if __name__ == '__main__':
     ################################
     # Run style transfer
     ################################
-    mixed = multi_style_transfer(sess,  model, content, multi_style, content_layers, style_layers, weight_styles,
-                            weight_content= FLAGS.weight_content,
+    mixed = multi_style_transfer(sess,  model, multi_content, multi_style, content_layers, style_layers, weight_contents, weight_styles,
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations)
 
     ################################################
     # Display results, make sure in BGR for cv2
     ################################################
-    merged = np.hstack([content] + multi_style + [mixed])
+    merged = np.hstack(multi_content + multi_style + [mixed])
     if FLAGS.model != 'AlexNet':
         cv2.imshow('Mixed', cv2.cvtColor(merged.astype(np.float32)/255.0,cv2.COLOR_RGB2BGR))
     else:
