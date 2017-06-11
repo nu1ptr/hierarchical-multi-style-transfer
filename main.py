@@ -188,8 +188,8 @@ def multi_style_transfer(session, model, content_images, style_images, content_l
         update_values = session.run(run_list, feed_dict=feed_dict)
         grad = update_values[0]
         adj_denoise_val = update_values[1]
-        adj_content_val = update_values[2:len(content_images)]
-        adj_style_vals = update_values[len(content_images):]
+        adj_content_val = update_values[2:2+len(content_images)]
+        adj_style_vals = update_values[2+len(content_images):]
 
         grad = np.squeeze(grad)
 
@@ -289,14 +289,15 @@ if __name__ == '__main__':
     # Define your loss layer locations and styles
     # Messing around here
     content_layers = [[5]]
-    multi_content = [contents["oldboy"]]
-    weight_contents = [3,2]
+    multi_content = [contents["ed"]]
+    weight_contents = [2.0]
 
-    #style_layers = [[0,1,2,3,4],[5,6,7,8,9]]
-    #multi_style = [styles["flowers"],styles["impression"]]
-    style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
-    multi_style = [styles["flowers"], styles["polygon"]]
-    weight_styles = [4,3]
+    style_layers = [[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]]
+    multi_style = [styles["spaghetti"]]
+    weight_styles = [6.0]
+    #style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
+    #multi_style = [styles["flowers"], styles["polygon"]]
+    #weight_styles = [4,3]
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
