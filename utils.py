@@ -1,4 +1,5 @@
 import tensorflow as tf
+import cv2
 
 def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group=1):
     '''From https://github.com/ethereon/caffe-tensorflow
@@ -7,7 +8,6 @@ def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group
     assert c_i%group==0
     assert c_o%group==0
     convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding)
-
 
     if group==1:
         conv = convolve(input, kernel)
