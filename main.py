@@ -13,6 +13,7 @@ from functools import reduce
 
 # Different Network Architectures
 import vgg16
+import vgg19
 import alexnet
 import resnet
 
@@ -29,6 +30,7 @@ flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, AlexNet, ResNet-L152, ResN
 
 # Get directories of our nets
 vgg16.data_dir = 'vgg16/'
+vgg19.vgg19_dir = 'vgg19/'
 resnet.resnet_dir = 'resnet/'
 alexnet.alexnet_dir = 'alexnet/'
 
@@ -264,25 +266,6 @@ def style_transfer(session, model, content_image, style_image, content_layer_ids
 
 # Run Style Transfer
 if __name__ == '__main__':
-    ###########################################
-    # Instantiate the models in a session
-    ###########################################
-    if FLAGS.model == 'VGG16':
-        model = vgg16.VGG16()
-        sess = tf.Session(graph=model.graph)
-    elif 'ResNet' in FLAGS.model:
-        sess = tf.Session()
-        model = resnet.ResNet(sess, model=FLAGS.model)
-    elif 'AlexNet' == FLAGS.model:
-        sess = tf.Session()
-        model = alexnet.AlexNet(sess)
-        # Image preprocessing for AlexNet
-        # If possible, try to make AlexNet FC
-        content = cv2.resize(content, (227,227)).astype(np.float32)
-        content = cv2.cvtColor(content, cv2.COLOR_RGB2BGR)
-        style = cv2.resize(style, (227,227)).astype(np.float32)
-        style = cv2.cvtColor(style, cv2.COLOR_RGB2BGR)
-
     ##################################################
     # Define parameters for style transfer and images
     ##################################################
@@ -298,16 +281,43 @@ if __name__ == '__main__':
         print('Style %d loaded: %s' % (i, k))
 
     # Define your loss layer locations and styles
-    content_layers = [4]
-    style_layers = [[0,2,4,6,8],[1,3,5,7,9]]
-    multi_style = [styles["mondrian"], styles["brushstrokes"]]
-    weight_styles = [5, 5]
+    # Messing around here
+    content_layers = [5]
+    #style_layers = [[0,1,2,3,4],[5,6,7,8,9]]
+    #multi_style = [styles["flowers"],styles["impression"]]
+    style_layers = [[0,1,2,3,4,5,6,7]]
+    multi_style = [styles["flowers"]]
+    weight_styles = [3]
 
     # Resize
     if FLAGS.resize > 0:
         ratio = float(content.shape[1]) / content.shape[0]
         content = cv2.resize(content, (int(FLAGS.resize*ratio), FLAGS.resize))
-        #style = cv2.resize(style, (content.shape[1], (content.shape[0])))
+        # This may be an issue with scaling...
+        multi_style = [cv2.resize(style, (content.shape[1], (content.shape[0]))) for style in multi_style]
+
+    ###########################################
+    # Instantiate the models in a session
+    ###########################################
+    if FLAGS.model == 'VGG16':
+        model = vgg16.VGG16()
+        sess = tf.Session(graph=model.graph)
+    elif FLAGS.model == 'VGG19':
+        sess = tf.Session()
+        model = vgg19.VGG19(sess)
+    elif 'ResNet' in FLAGS.model:
+        sess = tf.Session()
+        model = resnet.ResNet(sess, model=FLAGS.model)
+    elif 'AlexNet' == FLAGS.model:
+        # WARNING ONLY USE SINGLE STYLE FOR THIS
+        sess = tf.Session()
+        model = alexnet.AlexNet(sess)
+        # Image preprocessing for AlexNet
+        # If possible, try to make AlexNet FC
+        content = cv2.resize(content, (227,227)).astype(np.float32)
+        content = cv2.cvtColor(content, cv2.COLOR_RGB2BGR)
+        style = cv2.resize(style, (227,227)).astype(np.float32)
+        style = cv2.cvtColor(style, cv2.COLOR_RGB2BGR)
 
     ################################
     # Run style transfer
@@ -320,10 +330,11 @@ if __name__ == '__main__':
     ################################################
     # Display results, make sure in BGR for cv2
     ################################################
+    merged = np.hstack([content] + multi_style + [mixed])
     if FLAGS.model != 'AlexNet':
-        cv2.imshow('Mixed', cv2.cvtColor(mixed.astype(np.float32)/255.0,cv2.COLOR_RGB2BGR))
+        cv2.imshow('Mixed', cv2.cvtColor(merged.astype(np.float32)/255.0,cv2.COLOR_RGB2BGR))
     else:
-        cv2.imshow('Mixed', mixed.astype(np.float32)/255.0)
+        cv2.imshow('Mixed', merged.astype(np.float32)/255.0)
 
     sess.close()
     cv2.waitKey(0)

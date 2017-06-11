@@ -1,5 +1,6 @@
 *.pyc
 vgg16/*
+vgg19/*
 resnet/*
 caffe-tensorflow/*
 __pycache__/*
@@ -7,3 +8,4 @@ alexnet/*
 !alexnet/.gitkeep
 !vgg16/.gitkeep
 !resnet/.gitkeep
+!vgg19/.gitkeep

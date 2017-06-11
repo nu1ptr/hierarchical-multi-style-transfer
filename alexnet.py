@@ -86,6 +86,7 @@ class AlexNet:
         k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
         maxpool5 = tf.nn.max_pool(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
 
+        """
         #fc6
         #fc(4096, name='fc6')
         fc6W = tf.Variable(net_data["fc6"][0])
@@ -104,6 +105,7 @@ class AlexNet:
         #prob
         #softmax(name='prob'))
         prob = tf.nn.softmax(fc8)
+        """
 
         init = tf.global_variables_initializer()
         sess.run(init)
