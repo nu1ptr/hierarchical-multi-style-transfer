@@ -5,6 +5,8 @@ resnet/*
 caffe-tensorflow/*
 __pycache__/*
 alexnet/*
+images/results/*
+!images/results/.gitkeep
 !alexnet/.gitkeep
 !vgg16/.gitkeep
 !resnet/.gitkeep

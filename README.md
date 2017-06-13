@@ -1,7 +1,7 @@
 # Style Transfer Experimentation
 ![Style Transfer](/images/1.png)
 ![Multi Style Transfer](/images/2.png)
-![Multi Style Transfer](/images/3.png)
+![Multi Style Transfer](/images/3.jpg)
 
 ## Features
 * Single Style Transfer
