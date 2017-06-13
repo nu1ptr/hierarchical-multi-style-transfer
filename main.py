@@ -117,7 +117,7 @@ def create_denoise_loss(model):
 def transform_network(session, model, content_image):
     return
 
-def semantic_multi_style_transfer(session, model, content_images, style_images, masks, content_layer_ids, style_layer_ids, weight_contents,
+def spatial_multi_style_transfer(session, model, content_images, style_images, masks, content_layer_ids, style_layer_ids, weight_contents,
                         weight_styles, weight_denoise=0.3, num_iterations=100, step_size=9.0, style_step_size=10.5):
     assert len(style_images) == len(style_layer_ids), "Mismatch between number of style images and number of subset style layers"
 
@@ -163,7 +163,7 @@ def semantic_multi_style_transfer(session, model, content_images, style_images, 
     loss_contents_combine = reduce(f,[ w*a*l for w,a,l in zip(weight_contents, adj_contents, loss_contents)])
 
 
-    # Combine all the losses together
+    # Combine all the losses togeter
     loss_combine =  loss_contents_combine + weight_denoise * adj_denoise * loss_denoise
 
     # Minimize loss with random noise image
@@ -388,12 +388,12 @@ if __name__ == '__main__':
     # Define your loss layer locations and styles
     # Messing around here
     content_layers = [[5]]
-    multi_content = [contents["ed"]]
-    weight_contents = [2.0]
+    multi_content = [contents["geisel"]]
+    weight_contents = [4.0]
 
-    style_layers = [list(range(16)), [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]]
+    style_layers = [[0,1,2,3,4,5,6,], [7,8,9,10,11,12,13,14,15]]
     multi_style = [styles["mondrian"], styles["spaghetti"]]
-    weight_styles = [10.0, 6.0]
+    weight_styles = [4.0, 10.0]
     #style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
     #multi_style = [styles["flowers"], styles["polygon"]]
     #weight_styles = [4,3]
@@ -408,6 +408,13 @@ if __name__ == '__main__':
         # This may be an issue with scaling...
         multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
 
+
+    #mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32) / 255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
+    #mask2 = 1.0 - mask1
+    mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32) + 1.0
+    mask1 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32) + 1.0
+
+    masks = [mask1, mask2]
     ###########################################
     # Instantiate the models in a session
     ###########################################
@@ -442,26 +449,16 @@ if __name__ == '__main__':
     """
 
 
-    mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32) / 255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
-    mask2 = 1.0 - mask1
-
-    masks = [mask1*2, mask2*1]
-
-    mixed = semantic_multi_style_transfer(sess,  model, multi_content, multi_style, masks, content_layers, style_layers, weight_contents, weight_styles,
+    # Input must be RGB images, Output is BGR
+    mixed = spatial_multi_style_transfer(sess,  model, multi_content, multi_style, masks, content_layers, style_layers, weight_contents, weight_styles,
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations,
-                            step_size=9.00)
+                            step_size=10.00)
 
     ################################################
     # Display results, make sure in BGR for cv2
     ################################################
     merged = np.hstack(multi_content + multi_style + [mixed])
-    if FLAGS.model != 'AlexNet':
-        cv2.imshow('Mixed', cv2.cvtColor(merged.astype(np.float32)/255.0,cv2.COLOR_RGB2BGR))
-    else:
-        cv2.imshow('Mixed', merged.astype(np.float32)/255.0)
-
-    sess.close()
-    cv2.waitKey(0)
-    # Destroy Windows
-    cv2.destroyAllWindows()
+    file_name =  './images/results/' + str(np.random.randint(3,10000000)) + '.png'
+    cv2.imwrite(file_name, cv2.cvtColor(merged.astype(np.uint8), cv2.COLOR_BGR2RGB))
+    print('Saved to ' + file_name)

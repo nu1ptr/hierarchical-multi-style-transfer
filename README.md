@@ -1,14 +1,12 @@
 # Style Transfer Experimentation
 ![Style Transfer](/images/1.png)
 ![Multi Style Transfer](/images/2.png)
+![Multi Style Transfer](/images/3.png)
 
-## Features 
+## Features
 * Single Style Transfer
 * Multi Style Transfer (Might have to find really good hyper-parameters to get this to work. There is probably a "pull and tug" on the loss between the different styles, so won't converge well)
-
-## To be implemented
-* Transformation Network (In Progress)
-* Temporal Consistency (Maybe, very time-consuming though)
+* Spatial Multi Style Transfer
 
 ## Supported Models
 * AlexNet, npy (Not Fully Convolutional)
