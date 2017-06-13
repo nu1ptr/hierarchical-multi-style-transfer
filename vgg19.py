@@ -19,7 +19,7 @@ class VGG19:
         with self.graph.as_default():
             x = tf.placeholder(tf.float32, [None, None, None, 3], name='images')
             r,g,b = tf.split(axis=3, num_or_size_splits=3,value=x)
-            x = tf.concat(axis=3, values=[r-VGG_MEAN[2],g - VGG_MEAN[1],b - VGG_MEAN[0]])
+            x = tf.concat(axis=3, values=[b-VGG_MEAN[0],g - VGG_MEAN[1],r - VGG_MEAN[2]])
 
             self.conv1_1 = self.conv_layer(x, "conv1_1")
             self.conv1_2 = self.conv_layer(self.conv1_1, "conv1_2")

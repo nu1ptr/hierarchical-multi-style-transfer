@@ -117,6 +117,105 @@ def create_denoise_loss(model):
 def transform_network(session, model, content_image):
     return
 
+def semantic_multi_style_transfer(session, model, content_images, style_images, masks, content_layer_ids, style_layer_ids, weight_contents,
+                        weight_styles, weight_denoise=0.3, num_iterations=100, step_size=9.0, style_step_size=10.5):
+    assert len(style_images) == len(style_layer_ids), "Mismatch between number of style images and number of subset style layers"
+
+    # Print Layers
+    for i, layers in enumerate(content_layer_ids):
+        print("Content %d layers:" % i)
+        print(model.get_layer_names(layers))
+
+    for i, layers in enumerate(style_layer_ids):
+        print("Style %d layers:" % i)
+        print(model.get_layer_names(layers))
+
+    # Loss functions
+    loss_contents = [ create_content_loss(session=session, model=model, content_image=im, layer_ids=lays)
+                    for im, lays in zip(content_images, content_layer_ids) ]
+
+    # Multi Style Loss
+    loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays)
+                    for im, lays in zip(style_images, style_layer_ids) ]
+
+    # Denoising Loss
+    loss_denoise = create_denoise_loss(model)
+
+    # Adjustment variables
+    with model.graph.as_default():
+        adj_contents = [tf.Variable(1e-10, name='adj_content' + str(i)) for i in range(len(content_images))]
+        adj_styles = [tf.Variable(1e-10, name='adj_style' + str(i)) for i in range(len(style_images))]
+        adj_denoise = tf.Variable(1e-10, name='adj_denoise')
+
+    # Initialize the adjustments
+    session.run([adj_denoise.initializer] + \
+                [adj_con.initializer for adj_con in adj_contents] + \
+                [adj_sty.initializer for adj_sty in adj_styles])
+
+    # Avoid division by zero and get inverse of loss
+    update_adj_contents = [ adj_content.assign(1.0 / (loss_content + 1e-10)) for adj_content, loss_content in zip(adj_contents, loss_contents) ]
+    update_adj_styles = [ adj_style.assign(1.0 / (loss_style + 1e-10)) for adj_style, loss_style in zip(adj_styles, loss_styles) ]
+    update_adj_denoise = adj_denoise.assign(1.0 / (loss_denoise + 1e-10))
+
+
+    # Combine content losses
+    f = lambda a,b: a + b
+    loss_contents_combine = reduce(f,[ w*a*l for w,a,l in zip(weight_contents, adj_contents, loss_contents)])
+
+
+    # Combine all the losses together
+    loss_combine =  loss_contents_combine + weight_denoise * adj_denoise * loss_denoise
+
+    # Minimize loss with random noise image
+    gradient = tf.gradients(loss_combine, model.input)
+
+    # disambiguate style losses
+    style_gradients = [tf.gradients(w*a*l, model.input) for w,a,l in zip(weight_styles, adj_styles, loss_styles)]
+
+    run_list = [gradient] + style_gradients + [update_adj_denoise] + update_adj_contents + update_adj_styles
+
+    # Initialize a mixed image
+    mixed_image = np.random.rand(*content_images[0].shape) + 128
+
+    # Iterate over this mixed image
+    start = time.time()
+    bar = progressbar.ProgressBar()
+
+    # Format masks to rgb
+    masks = [ cv2.cvtColor(mask.astype(np.float32), cv2.COLOR_GRAY2RGB) for mask in masks]
+
+    # Pretty much own gradient descent
+    for i in bar(range(num_iterations)):
+        feed_dict = model.create_feed_dict(image=mixed_image)
+
+        # Get update values
+        update_values = session.run(run_list, feed_dict=feed_dict)
+        grad = update_values[0]
+        style_grads = update_values[1:1+len(style_gradients)]
+        adj_denoise_val = update_values[1+len(style_gradients)]
+        adj_content_val = update_values[2+len(style_gradients):2+len(style_gradients) + len(content_images)]
+        adj_style_vals = update_values[2 + len(style_gradients) + len(content_images):]
+
+        grad = np.squeeze(grad)
+
+        # Masking Layers for each style
+        style_grad = 0
+        for sty_grad, mask, in zip(style_grads, masks):
+            sty_grad = np.squeeze(sty_grad)
+            grad += np.multiply(sty_grad, mask)
+
+        # Learning rate
+        step_size_scaled = step_size / (np.std(grad) + 1e-8)
+
+        # Update our mixed image
+        mixed_image -= (grad)* step_size_scaled
+
+        mixed_image = np.clip(mixed_image, 0.0, 255.0)
+    end = time.time()
+
+    print("Computation time: %f" % (end - start))
+    return mixed_image
+
 def multi_style_transfer(session, model, content_images, style_images, content_layer_ids, style_layer_ids, weight_contents,
                         weight_styles, weight_denoise=0.3, num_iterations=100, step_size=10.0):
     assert len(style_images) == len(style_layer_ids), "Mismatch between number of style images and number of subset style layers"
@@ -292,9 +391,9 @@ if __name__ == '__main__':
     multi_content = [contents["ed"]]
     weight_contents = [2.0]
 
-    style_layers = [[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]]
-    multi_style = [styles["spaghetti"]]
-    weight_styles = [6.0]
+    style_layers = [list(range(16)), [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]]
+    multi_style = [styles["mondrian"], styles["spaghetti"]]
+    weight_styles = [10.0, 6.0]
     #style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
     #multi_style = [styles["flowers"], styles["polygon"]]
     #weight_styles = [4,3]
@@ -336,9 +435,22 @@ if __name__ == '__main__':
     ################################
     # Run style transfer
     ################################
+    """
     mixed = multi_style_transfer(sess,  model, multi_content, multi_style, content_layers, style_layers, weight_contents, weight_styles,
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations)
+    """
+
+
+    mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32) / 255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
+    mask2 = 1.0 - mask1
+
+    masks = [mask1*2, mask2*1]
+
+    mixed = semantic_multi_style_transfer(sess,  model, multi_content, multi_style, masks, content_layers, style_layers, weight_contents, weight_styles,
+                            weight_denoise= FLAGS.weight_denoise,
+                            num_iterations= FLAGS.iterations,
+                            step_size=9.00)
 
     ################################################
     # Display results, make sure in BGR for cv2
