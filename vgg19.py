@@ -117,7 +117,7 @@ class VGG19:
 
     def preprocess(self, image, bgr=False):
         bgr_image = image
-        if bgr is False:
+        if bgr == False:
             bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
         bgr_image[:,:,0] - VGG_MEAN[0]

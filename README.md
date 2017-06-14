@@ -6,7 +6,7 @@
 ## Features
 * Single Style Transfer
 * Multi Style Transfer (Might have to find really good hyper-parameters to get this to work. There is probably a "pull and tug" on the loss between the different styles, so won't converge well)
-* Spatial Multi Style Transfer
+* Spatial Multi Style Transfer (Doesn't work, don't use it. You will need to figure out a way to calculate the style loss on specific weighted regions)
 
 ## Supported Models
 * AlexNet, npy (Not Fully Convolutional)

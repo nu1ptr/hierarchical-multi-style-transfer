@@ -81,7 +81,7 @@ def gram_matrix(tensor):
     return gram
 
 # Style loss
-def create_style_loss(session, model, style_image, layer_ids):
+def create_style_loss(session, model, style_image, layer_ids, style_mask=None):
     # define a placeholder within our model
     feed_dict = model.create_feed_dict(image=model.preprocess(style_image))
 
@@ -90,16 +90,33 @@ def create_style_loss(session, model, style_image, layer_ids):
     with model.graph.as_default():
         # Gram Matrix captures second order statistics, toss away everything that is unnecessary
         # and keep style
-        gram_layers = [gram_matrix(layer) for layer in layers]
 
         # Calculate the values for all layers that we want to get the style of by taking taking the gram matrix
-        values = session.run(gram_layers, feed_dict=feed_dict)
+        values = session.run(layers, feed_dict=feed_dict)
 
         layer_losses = []
 
-        for value, gram_layer in zip(values, gram_layers):
-            value_const = tf.constant(value)
-            loss = mean_squared_error(gram_layer, value_const)
+        for value, layer in zip(values, layers):
+            value = tf.convert_to_tensor(value)
+
+            # Create a tensor mask
+            if style_mask is not None:
+                _, h,w,d = value.get_shape()
+                mask = cv2.resize(style_mask, (w,h), interpolation=cv2.INTER_AREA)
+                mask = tf.convert_to_tensor(mask)
+                tensors = []
+                for _ in range(d.value):
+                    tensors.append(mask)
+                mask = tf.stack(tensors, axis=2)
+                mask = tf.stack(mask, axis=0)
+                mask = tf.expand_dims(mask, 0)
+                masked_value = tf.multiply(value, mask)
+                masked_layer = tf.multiply(layer, mask)
+                gram_layer = gram_matrix(masked_layer)
+            else:
+                gram_layer = gram_matrix(layer)
+
+            loss = mean_squared_error(gram_layer, gram_matrix(value))
             layer_losses.append(loss)
 
         total_loss = tf.reduce_mean(layer_losses)
@@ -112,7 +129,6 @@ def create_style_loss(session, model, style_image, layer_ids):
 def create_denoise_loss(model):
     loss = tf.reduce_sum(tf.abs(model.input[:,1:,:,:] - model.input[:,:-1,:,:])) + \
            tf.reduce_sum(tf.abs(model.input[:,:,1:,:] - model.input[:,:,:-1,:]))
-
     return loss
 
 def transform_network(session, model, content_image):
@@ -136,8 +152,8 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
                     for im, lays in zip(content_images, content_layer_ids) ]
 
     # Multi Style Loss
-    loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays)
-                    for im, lays in zip(style_images, style_layer_ids) ]
+    loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays, style_mask=mask)
+                    for im, lays, mask in zip(style_images, style_layer_ids, masks) ]
 
     # Denoising Loss
     loss_denoise = create_denoise_loss(model)
@@ -158,31 +174,33 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
     update_adj_styles = [ adj_style.assign(1.0 / (loss_style + 1e-10)) for adj_style, loss_style in zip(adj_styles, loss_styles) ]
     update_adj_denoise = adj_denoise.assign(1.0 / (loss_denoise + 1e-10))
 
-
     # Combine content losses
     f = lambda a,b: a + b
     loss_contents_combine = reduce(f,[ w*a*l for w,a,l in zip(weight_contents, adj_contents, loss_contents)])
+    loss_style_combine = reduce(f,[w*a*l for w,a,l in zip(weight_styles, adj_styles, loss_styles)])
 
     # Combine all the losses togeter
-    loss_combine =  loss_contents_combine + weight_denoise * adj_denoise * loss_denoise
+    loss_combine =  loss_contents_combine + loss_style_combine + weight_denoise * adj_denoise * loss_denoise
 
     # Minimize loss with random noise image
     gradient = tf.gradients(loss_combine, model.input)
 
     # disambiguate style losses
-    style_gradients = [tf.gradients(w*a*l, model.input) for w,a,l in zip(weight_styles, adj_styles, loss_styles)]
+    #style_gradients = [tf.gradients(w*a*l, model.input) for w,a,l in zip(weight_styles, adj_styles, loss_styles)]
 
-    run_list = [gradient] + style_gradients + [update_adj_denoise] + update_adj_contents + update_adj_styles
+    #run_list = [gradient] + style_gradients + [update_adj_denoise] + update_adj_contents + update_adj_styles
+    run_list = [gradient] + [update_adj_denoise] + update_adj_contents + update_adj_styles
 
     # Initialize a mixed image
     mixed_image = np.random.normal(size=content_images[0].shape, scale=np.std(content_images[0]) * 0.1)
+    mixed_image = np.zeros(content_images[0].shape)
 
     # Iterate over this mixed image
     start = time.time()
     bar = progressbar.ProgressBar()
 
     # Format masks to rgb
-    masks = [ cv2.cvtColor(mask.astype(np.float32), cv2.COLOR_GRAY2RGB) for mask in masks]
+    #masks = [ cv2.cvtColor(mask.astype(np.float32), cv2.COLOR_GRAY2RGB) for mask in masks]
 
     # Pretty much own gradient descent
     for i in bar(range(num_iterations)):
@@ -193,24 +211,30 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
 
         # Get update values
         grad = update_values[0]
-        style_grads = update_values[1:1+len(style_gradients)]
-        adj_denoise_val = update_values[1+len(style_gradients)]
-        adj_content_val = update_values[2+len(style_gradients):2+len(style_gradients) + len(content_images)]
-        adj_style_vals = update_values[2 + len(style_gradients) + len(content_images):]
+        adj_denoise_val = update_values[1]
+        adj_content_val = update_values[2]
+        adj_style_vals = update_values[3:]
 
         grad = np.squeeze(grad)
 
         # Masking Layers for each style
+        """
         style_grad = 0
         for sty_grad, mask, in zip(style_grads, masks):
             sty_grad = np.squeeze(sty_grad)
             style_grad += np.multiply(sty_grad, mask)
 
+        # Normalize style_grad?
+        style_grad /= len(style_grads)
+        """
+
         # Learning rate
+        #step_size_scaled = step_size / (np.std(grad + style_grad) + 1e-8)
         step_size_scaled = step_size / (np.std(grad) + 1e-8)
 
         # Update our mixed image
-        mixed_image -= (grad + style_grad)* step_size_scaled
+        #mixed_image -= (grad + style_grad)* step_size_scaled
+        mixed_image -= (grad)* step_size_scaled
 
         mixed_image = np.clip(mixed_image, 0.0, 255.0)
     end = time.time()
@@ -277,7 +301,7 @@ def multi_style_transfer(session, model, content_images, style_images, content_l
     run_list = [gradient, update_adj_denoise] + update_adj_contents + update_adj_styles
 
     # Initialize a mixed image
-    mixed_image = np.random.rand(*content_images[0].shape) + 128
+    mixed_image = np.random.normal(size=content_images[0].shape, scale=np.std(content_images[0]) * 0.1)
 
     # Iterate over this mixed image
     start = time.time()
@@ -306,7 +330,7 @@ def multi_style_transfer(session, model, content_images, style_images, content_l
     end = time.time()
 
     print("Computation time: %f" % (end - start))
-    return mixed_image
+    return model.unprocess(mixed_image)
 
 def style_transfer(session, model, content_image, style_image, content_layer_ids, style_layer_ids,
                     weight_content=1.5, weight_style=10.0, weight_denoise=0.3,
@@ -392,17 +416,12 @@ if __name__ == '__main__':
     # Define your loss layer locations and styles
     # Messing around here
     content_layers = [[5]]
-    multi_content = [contents["geisel"]]
-    weight_contents = [4.0]
+    multi_content = [contents["ed"]]
+    weight_contents = [1.0]
 
     style_layers = [ list(range(16)), list(range(16)) ]
-    multi_style = [styles["spaghetti"], styles["monsters"]]
-    weight_styles = [4.0,3.0]
-
-    #style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
-    #multi_style = [styles["flowers"], styles["polygon"]]
-    #weight_styles = [4,3]
-
+    multi_style = [styles["spaghetti"], styles["polygon"]]
+    weight_styles = [4.0,4.0]
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
@@ -415,14 +434,19 @@ if __name__ == '__main__':
         multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
 
 
-    #mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32) / 255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
-    #mask2 = 1.0 - mask1
+    mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32)/255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
+    mask2 = 1.0 - mask1
+    #mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])) + 1.0
+
+    """
     mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
     mask2[:,int(mask2.shape[1]/2):] = 1.0
     mask1 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
     mask1[:,:int(mask1.shape[1]/2 - 1)] = 1.0
+    """
 
     masks = [mask1, mask2]
+
     ###########################################
     # Instantiate the models in a session
     ###########################################
@@ -465,6 +489,7 @@ if __name__ == '__main__':
     ################################################
     # Display results, make sure in BGR for cv2
     ################################################
+    mixed = cv2.cvtColor(mixed.astype(np.uint8), cv2.COLOR_BGR2RGB)
     merged = np.hstack(multi_content + multi_style + [mixed])
     file_name =  './images/results/' + str(np.random.randint(3,10000000)) + '.png'
     cv2.imwrite(file_name, cv2.cvtColor(merged.astype(np.uint8), cv2.COLOR_BGR2RGB))
