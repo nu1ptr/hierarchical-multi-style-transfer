@@ -2,12 +2,14 @@
 import os
 import tensorflow as tf
 import numpy as np
+import cv2
 
 vgg19_dir = "vgg19/"
 VGG_MEAN = [103.939, 116.779, 123.68]
 
 class VGG19:
     tensor_name_input_image = "images:0"
+    arch="VGG19"
 
     def __init__(self, sess):
         print('Loading VGG19')
@@ -18,8 +20,6 @@ class VGG19:
 
         with self.graph.as_default():
             x = tf.placeholder(tf.float32, [None, None, None, 3], name='images')
-            r,g,b = tf.split(axis=3, num_or_size_splits=3,value=x)
-            x = tf.concat(axis=3, values=[b-VGG_MEAN[0],g - VGG_MEAN[1],r - VGG_MEAN[2]])
 
             self.conv1_1 = self.conv_layer(x, "conv1_1")
             self.conv1_2 = self.conv_layer(self.conv1_1, "conv1_2")
@@ -114,6 +114,25 @@ class VGG19:
         feed_dict = {self.tensor_name_input_image: image}
 
         return feed_dict
+
+    def preprocess(self, image, bgr=False):
+        bgr_image = image
+        if bgr is False:
+            bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+        bgr_image[:,:,0] - VGG_MEAN[0]
+        bgr_image[:,:,1] - VGG_MEAN[1]
+        bgr_image[:,:,2] - VGG_MEAN[2]
+
+        return bgr_image
+
+    def unprocess(self, image):
+        unprocessed = image
+        unprocessed[:,:,0] + VGG_MEAN[0]
+        unprocessed[:,:,1] + VGG_MEAN[1]
+        unprocessed[:,:,2] + VGG_MEAN[2]
+
+        return unprocessed
 
 # Test to see if its working
 if __name__ == "__main__":

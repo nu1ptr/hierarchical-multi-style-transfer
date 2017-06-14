@@ -11,6 +11,8 @@ class AlexNet:
 
     ydim = 1
 
+    arch = 'AlexNet'
+
     def __init__(self, sess):
         # Load the meta-data
         print('Loading AlexNet')
@@ -136,6 +138,15 @@ class AlexNet:
         feed_dict = {self.tensor_name_input_image: image}
 
         return feed_dict
+
+    def preprocess(image, bgr=False):
+        bgr = image
+        return bgr
+
+    def unprocess(image):
+        unprocessed = image
+        return unprocessed
+
 
 # For testing purposes, make sure everything works
 if __name__ == "__main__":

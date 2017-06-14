@@ -26,6 +26,7 @@ flags.DEFINE_string('styles', '../data/styles/', 'Style Image Directory')
 flags.DEFINE_integer('iterations', 100, 'Number iterations')
 flags.DEFINE_integer('resize', -1, 'Resize to according to height')
 flags.DEFINE_float('weight_denoise', 0.3, 'Weight Denoise')
+flags.DEFINE_float('step_size', 10.0, 'Step size of gradient')
 flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, AlexNet, ResNet-L152, ResNet-L101, ResNet-L50')
 
 # Get directories of our nets
@@ -41,7 +42,7 @@ def mean_squared_error(a,b):
 # Our content loss for some layer in VGG
 def create_content_loss(session, model, content_image, layer_ids):
     # Feed our content image as the imput
-    feed_dict = model.create_feed_dict(image=content_image)
+    feed_dict = model.create_feed_dict(image=model.preprocess(content_image))
 
     # The layers that we want to run our loss computation on
     layers = model.get_layer_tensors(layer_ids)
@@ -82,7 +83,7 @@ def gram_matrix(tensor):
 # Style loss
 def create_style_loss(session, model, style_image, layer_ids):
     # define a placeholder within our model
-    feed_dict = model.create_feed_dict(image=style_image)
+    feed_dict = model.create_feed_dict(image=model.preprocess(style_image))
 
     layers = model.get_layer_tensors(layer_ids)
 
@@ -162,7 +163,6 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
     f = lambda a,b: a + b
     loss_contents_combine = reduce(f,[ w*a*l for w,a,l in zip(weight_contents, adj_contents, loss_contents)])
 
-
     # Combine all the losses togeter
     loss_combine =  loss_contents_combine + weight_denoise * adj_denoise * loss_denoise
 
@@ -175,7 +175,7 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
     run_list = [gradient] + style_gradients + [update_adj_denoise] + update_adj_contents + update_adj_styles
 
     # Initialize a mixed image
-    mixed_image = np.random.rand(*content_images[0].shape) + 128
+    mixed_image = np.random.normal(size=content_images[0].shape, scale=np.std(content_images[0]) * 0.1)
 
     # Iterate over this mixed image
     start = time.time()
@@ -188,8 +188,10 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
     for i in bar(range(num_iterations)):
         feed_dict = model.create_feed_dict(image=mixed_image)
 
-        # Get update values
+        # Run the gradients
         update_values = session.run(run_list, feed_dict=feed_dict)
+
+        # Get update values
         grad = update_values[0]
         style_grads = update_values[1:1+len(style_gradients)]
         adj_denoise_val = update_values[1+len(style_gradients)]
@@ -202,19 +204,21 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
         style_grad = 0
         for sty_grad, mask, in zip(style_grads, masks):
             sty_grad = np.squeeze(sty_grad)
-            grad += np.multiply(sty_grad, mask)
+            style_grad += np.multiply(sty_grad, mask)
 
         # Learning rate
         step_size_scaled = step_size / (np.std(grad) + 1e-8)
 
         # Update our mixed image
-        mixed_image -= (grad)* step_size_scaled
+        mixed_image -= (grad + style_grad)* step_size_scaled
 
         mixed_image = np.clip(mixed_image, 0.0, 255.0)
     end = time.time()
 
+    # Post Processing
+
     print("Computation time: %f" % (end - start))
-    return mixed_image
+    return model.unprocess(mixed_image)
 
 def multi_style_transfer(session, model, content_images, style_images, content_layer_ids, style_layer_ids, weight_contents,
                         weight_styles, weight_denoise=0.3, num_iterations=100, step_size=10.0):
@@ -391,12 +395,14 @@ if __name__ == '__main__':
     multi_content = [contents["geisel"]]
     weight_contents = [4.0]
 
-    style_layers = [[0,1,2,3,4,5,6,], [7,8,9,10,11,12,13,14,15]]
-    multi_style = [styles["mondrian"], styles["spaghetti"]]
-    weight_styles = [4.0, 10.0]
+    style_layers = [ list(range(16)), list(range(16)) ]
+    multi_style = [styles["spaghetti"], styles["monsters"]]
+    weight_styles = [4.0,3.0]
+
     #style_layers = [[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]
     #multi_style = [styles["flowers"], styles["polygon"]]
     #weight_styles = [4,3]
+
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
@@ -411,8 +417,10 @@ if __name__ == '__main__':
 
     #mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32) / 255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
     #mask2 = 1.0 - mask1
-    mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32) + 1.0
-    mask1 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32) + 1.0
+    mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
+    mask2[:,int(mask2.shape[1]/2):] = 1.0
+    mask1 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
+    mask1[:,:int(mask1.shape[1]/2 - 1)] = 1.0
 
     masks = [mask1, mask2]
     ###########################################
@@ -448,12 +456,11 @@ if __name__ == '__main__':
                             num_iterations= FLAGS.iterations)
     """
 
-
     # Input must be RGB images, Output is BGR
     mixed = spatial_multi_style_transfer(sess,  model, multi_content, multi_style, masks, content_layers, style_layers, weight_contents, weight_styles,
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations,
-                            step_size=10.00)
+                            step_size=      FLAGS.step_size)
 
     ################################################
     # Display results, make sure in BGR for cv2
