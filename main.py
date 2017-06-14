@@ -80,6 +80,29 @@ def gram_matrix(tensor):
 
     return gram
 
+"""
+def create_style_loss(session, model, style_image, layer_ids):
+    # Create a feed-dict with the style-image.
+    feed_dict = model.create_feed_dict(image=style_image)
+
+    layers = model.get_layer_tensors(layer_ids)
+    with model.graph.as_default():
+        gram_layers = [gram_matrix(layer) for layer in layers]
+
+        values = session.run(gram_layers, feed_dict=feed_dict)
+
+        # Initialize an empty list of loss-functions.
+        layer_losses = []
+
+        for value, gram_layer in zip(values, gram_layers):
+            value_const = tf.constant(value)
+            loss = mean_squared_error(gram_layer, value_const)
+            layer_losses.append(loss)
+        total_loss = tf.reduce_mean(layer_losses)
+
+    return total_loss
+"""
+
 # Style loss
 def create_style_loss(session, model, style_image, layer_ids, style_mask=None):
     # define a placeholder within our model
@@ -185,22 +208,16 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
     # Minimize loss with random noise image
     gradient = tf.gradients(loss_combine, model.input)
 
-    # disambiguate style losses
-    #style_gradients = [tf.gradients(w*a*l, model.input) for w,a,l in zip(weight_styles, adj_styles, loss_styles)]
-
     #run_list = [gradient] + style_gradients + [update_adj_denoise] + update_adj_contents + update_adj_styles
     run_list = [gradient] + [update_adj_denoise] + update_adj_contents + update_adj_styles
 
     # Initialize a mixed image
     mixed_image = np.random.normal(size=content_images[0].shape, scale=np.std(content_images[0]) * 0.1)
-    mixed_image = np.zeros(content_images[0].shape)
+    #mixed_image = np.zeros(content_images[0].shape)
 
     # Iterate over this mixed image
     start = time.time()
     bar = progressbar.ProgressBar()
-
-    # Format masks to rgb
-    #masks = [ cv2.cvtColor(mask.astype(np.float32), cv2.COLOR_GRAY2RGB) for mask in masks]
 
     # Pretty much own gradient descent
     for i in bar(range(num_iterations)):
@@ -218,31 +235,39 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
         grad = np.squeeze(grad)
 
         # Masking Layers for each style
-        """
-        style_grad = 0
-        for sty_grad, mask, in zip(style_grads, masks):
-            sty_grad = np.squeeze(sty_grad)
-            style_grad += np.multiply(sty_grad, mask)
-
-        # Normalize style_grad?
-        style_grad /= len(style_grads)
-        """
 
         # Learning rate
-        #step_size_scaled = step_size / (np.std(grad + style_grad) + 1e-8)
         step_size_scaled = step_size / (np.std(grad) + 1e-8)
 
         # Update our mixed image
-        #mixed_image -= (grad + style_grad)* step_size_scaled
         mixed_image -= (grad)* step_size_scaled
 
-        mixed_image = np.clip(mixed_image, 0.0, 255.0)
+        mixed_image = np.clip(mixed_image, 0.0, 500.0)
     end = time.time()
 
-    # Post Processing
+    # Post processing
+    """
+    mixed_image = model.unprocess(mixed_image)
+    min_b = np.min(mixed_image[:,:,0])
+    min_g = np.min(mixed_image[:,:,1])
+    min_r = np.min(mixed_image[:,:,2])
+    mixed_image[:,:,0] += np.abs(min_b)
+    mixed_image[:,:,1] += np.abs(min_g)
+    mixed_image[:,:,2] += np.abs(min_r)
+    """
+    max_b = np.max(mixed_image[:,:,0])
+    max_g = np.max(mixed_image[:,:,1])
+    max_r = np.max(mixed_image[:,:,2])
+    mixed_image[:,:,0] = mixed_image[:,:,0] / max_b
+    mixed_image[:,:,1] = mixed_image[:,:,1] / max_g
+    mixed_image[:,:,2] = mixed_image[:,:,2] / max_r
+    mixed_image *= 255.0
+    mixed_image = cv2.cvtColor(mixed_image.astype(np.float32), cv2.COLOR_BGR2YUV)
+    mixed_image[:,:,0] = cv2.equalizeHist(mixed_image[:,:,0].astype(np.uint8))
+    mixed_image= cv2.cvtColor(mixed_image.astype(np.float32), cv2.COLOR_YUV2BGR)
 
     print("Computation time: %f" % (end - start))
-    return model.unprocess(mixed_image)
+    return mixed_image
 
 def multi_style_transfer(session, model, content_images, style_images, content_layer_ids, style_layer_ids, weight_contents,
                         weight_styles, weight_denoise=0.3, num_iterations=100, step_size=10.0):
@@ -391,11 +416,32 @@ def style_transfer(session, model, content_image, style_image, content_layer_ids
 
         # Update our mixed image
         mixed_image -= grad * step_size_scaled
-
         mixed_image = np.clip(mixed_image, 0.0, 255.0)
+
     end = time.time()
 
     print("Computation time: %f" % (end - start))
+
+    # Post processing
+    """
+    mixed_image = model.unprocess(mixed_image)
+    min_b = np.min(mixed_image[:,:,0])
+    min_g = np.min(mixed_image[:,:,1])
+    min_r = np.min(mixed_image[:,:,2])
+    mixed_image[:,:,0] += np.abs(min_b)
+    mixed_image[:,:,1] += np.abs(min_g)
+    mixed_image[:,:,2] += np.abs(min_r)
+    max_b = np.max(mixed_image[:,:,0])
+    max_g = np.max(mixed_image[:,:,1])
+    max_r = np.max(mixed_image[:,:,2])
+    mixed_image[:,:,0] = mixed_image[:,:,0] / max_b
+    mixed_image[:,:,1] = mixed_image[:,:,1] / max_g
+    mixed_image[:,:,2] = mixed_image[:,:,2] / max_r
+    mixed_image *= 255.0
+    """
+    mixed_image = cv2.cvtColor(mixed_image.astype(np.float32), cv2.COLOR_BGR2YUV)
+    mixed_image[:,:,0] = cv2.equalizeHist(mixed_image[:,:,0].astype(np.uint8))
+    mixed_image= cv2.cvtColor(mixed_image.astype(np.float32), cv2.COLOR_YUV2BGR)
 
     return mixed_image
 
@@ -419,9 +465,9 @@ if __name__ == '__main__':
     multi_content = [contents["ed"]]
     weight_contents = [1.0]
 
-    style_layers = [ list(range(16)), list(range(16)) ]
-    multi_style = [styles["spaghetti"], styles["polygon"]]
-    weight_styles = [4.0,4.0]
+    style_layers = [ list(range(16)), list(range(16))]
+    multi_style = [styles["spaghetti"], styles["melt"]]
+    weight_styles = [5.0,5.0]
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
@@ -434,9 +480,8 @@ if __name__ == '__main__':
         multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
 
 
-    mask1 = cv2.resize((cv2.imread("./masks/gradient_bw.png",-1).astype(np.float32)/255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
+    mask1 = cv2.resize((cv2.imread("./masks/gradient_bw_hard.png",-1).astype(np.float32)/255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
     mask2 = 1.0 - mask1
-    #mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])) + 1.0
 
     """
     mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
@@ -444,6 +489,7 @@ if __name__ == '__main__':
     mask1 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
     mask1[:,:int(mask1.shape[1]/2 - 1)] = 1.0
     """
+
 
     masks = [mask1, mask2]
 
@@ -479,18 +525,23 @@ if __name__ == '__main__':
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations)
     """
-
     # Input must be RGB images, Output is BGR
     mixed = spatial_multi_style_transfer(sess,  model, multi_content, multi_style, masks, content_layers, style_layers, weight_contents, weight_styles,
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations,
                             step_size=      FLAGS.step_size)
+    """
+    mixed = style_transfer(sess, model, multi_content[0], multi_style[0],content_layers[0], style_layers[0],
+                    weight_content=1.5, weight_style=10.0, weight_denoise=0.3,
+                    num_iterations=500, step_size=10.0)
+    """
 
     ################################################
     # Display results, make sure in BGR for cv2
     ################################################
-    mixed = cv2.cvtColor(mixed.astype(np.uint8), cv2.COLOR_BGR2RGB)
+    # Post Processing
+    #mixed = cv2.bilateralFilter(mixed.astype(np.float32),9,75,75)
     merged = np.hstack(multi_content + multi_style + [mixed])
     file_name =  './images/results/' + str(np.random.randint(3,10000000)) + '.png'
-    cv2.imwrite(file_name, cv2.cvtColor(merged.astype(np.uint8), cv2.COLOR_BGR2RGB))
+    cv2.imwrite(file_name, cv2.cvtColor(merged.astype(np.float32), cv2.COLOR_BGR2RGB))
     print('Saved to ' + file_name)

@@ -23,23 +23,23 @@ class VGG19:
 
             self.conv1_1 = self.conv_layer(x, "conv1_1")
             self.conv1_2 = self.conv_layer(self.conv1_1, "conv1_2")
-            self.pool1 = self.max_pool(self.conv1_2, 'pool1')
+            self.pool1 = self.avg_pool(self.conv1_2, 'pool1')
 
             self.conv2_1 = self.conv_layer(self.pool1, "conv2_1")
             self.conv2_2 = self.conv_layer(self.conv2_1, "conv2_2")
-            self.pool2 = self.max_pool(self.conv2_2, 'pool2')
+            self.pool2 = self.avg_pool(self.conv2_2, 'pool2')
 
             self.conv3_1 = self.conv_layer(self.pool2, "conv3_1")
             self.conv3_2 = self.conv_layer(self.conv3_1, "conv3_2")
             self.conv3_3 = self.conv_layer(self.conv3_2, "conv3_3")
             self.conv3_4 = self.conv_layer(self.conv3_3, "conv3_4")
-            self.pool3 = self.max_pool(self.conv3_4, 'pool3')
+            self.pool3 = self.avg_pool(self.conv3_4, 'pool3')
 
             self.conv4_1 = self.conv_layer(self.pool3, "conv4_1")
             self.conv4_2 = self.conv_layer(self.conv4_1, "conv4_2")
             self.conv4_3 = self.conv_layer(self.conv4_2, "conv4_3")
             self.conv4_4 = self.conv_layer(self.conv4_3, "conv4_4")
-            self.pool4 = self.max_pool(self.conv4_4, 'pool4')
+            self.pool4 = self.avg_pool(self.conv4_4, 'pool4')
 
             self.conv5_1 = self.conv_layer(self.pool4, "conv5_1")
             self.conv5_2 = self.conv_layer(self.conv5_1, "conv5_2")
@@ -120,17 +120,17 @@ class VGG19:
         if bgr == False:
             bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        bgr_image[:,:,0] - VGG_MEAN[0]
-        bgr_image[:,:,1] - VGG_MEAN[1]
-        bgr_image[:,:,2] - VGG_MEAN[2]
+        bgr_image[:,:,0] = bgr_image[:,:,0] - VGG_MEAN[0]
+        bgr_image[:,:,1] = bgr_image[:,:,1] - VGG_MEAN[1]
+        bgr_image[:,:,2] = bgr_image[:,:,2] - VGG_MEAN[2]
 
-        return bgr_image
+        return image
 
     def unprocess(self, image):
         unprocessed = image
-        unprocessed[:,:,0] + VGG_MEAN[0]
-        unprocessed[:,:,1] + VGG_MEAN[1]
-        unprocessed[:,:,2] + VGG_MEAN[2]
+        #unprocessed[:,:,1] = unprocessed[:,:,0] + VGG_MEAN[0]
+        #unprocessed[:,:,1] = unprocessed[:,:,1] + VGG_MEAN[1]
+        #unprocessed[:,:,2] = unprocessed[:,:,2] + VGG_MEAN[2]
 
         return unprocessed
 

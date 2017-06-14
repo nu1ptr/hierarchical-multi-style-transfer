@@ -2,11 +2,12 @@
 ![Style Transfer](/images/1.png)
 ![Multi Style Transfer](/images/2.png)
 ![Multi Style Transfer](/images/3.jpg)
+![Spatial Multi Style Transfer](/images/7.jpg)
 
 ## Features
 * Single Style Transfer
 * Multi Style Transfer (Might have to find really good hyper-parameters to get this to work. There is probably a "pull and tug" on the loss between the different styles, so won't converge well)
-* Spatial Multi Style Transfer (Doesn't work, don't use it. You will need to figure out a way to calculate the style loss on specific weighted regions)
+* Spatial Multi Style Transfer
 
 ## Supported Models
 * AlexNet, npy (Not Fully Convolutional)
