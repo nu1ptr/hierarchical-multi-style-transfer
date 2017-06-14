@@ -466,8 +466,8 @@ if __name__ == '__main__':
     weight_contents = [1.0]
 
     style_layers = [ list(range(16)), list(range(16))]
-    multi_style = [styles["spaghetti"], styles["melt"]]
-    weight_styles = [5.0,5.0]
+    multi_style = [styles["flowers"], styles["monsters"]]
+    weight_styles = [10.0,10.0]
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
@@ -480,7 +480,7 @@ if __name__ == '__main__':
         multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
 
 
-    mask1 = cv2.resize((cv2.imread("./masks/gradient_bw_hard.png",-1).astype(np.float32)/255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
+    mask1 = cv2.resize((cv2.imread("./masks/radial_bw.jpg",0).astype(np.float32)/255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
     mask2 = 1.0 - mask1
 
     """

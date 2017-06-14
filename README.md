@@ -3,6 +3,7 @@
 ![Multi Style Transfer](/images/2.png)
 ![Multi Style Transfer](/images/3.jpg)
 ![Spatial Multi Style Transfer](/images/7.jpg)
+![Spatial Multi Style Transfer](/images/8.jpg)
 
 ## Features
 * Single Style Transfer
