@@ -1,13 +1,14 @@
-# Style Transfer Experimentation
+# Hierarchical Multi-Style Transfer
 ![Style Transfer](/images/1.png)
 ![Multi Style Transfer](/images/2.png)
 ![Multi Style Transfer](/images/3.jpg)
+![Multi Style Transfer](/images/9.jpg)
 ![Spatial Multi Style Transfer](/images/7.jpg)
 ![Spatial Multi Style Transfer](/images/8.jpg)
 
 ## Features
 * Single Style Transfer
-* Multi Style Transfer (Might have to find really good hyper-parameters to get this to work. There is probably a "pull and tug" on the loss between the different styles, so won't converge well)
+* Hierarchical Multi Style Transfer (Might have to find really good hyper-parameters to get this to work. There is probably a "pull and tug" on the loss between the different styles, so won't converge well)
 * Spatial Multi Style Transfer
 
 ## Supported Models
@@ -20,9 +21,19 @@
 	* Try converting with Kaffe instead of Ry's converter
 * Occasional saturation on images
 
+### Citation
+```
+  @misc{engstrom2016faststyletransfer,
+    author = {Jason Quach},
+    title = {Hierarchical Style Transfer},
+    year = {2017},
+    howpublished = {\url{https://github.com/nu1ptr/hierarchical-multi-style-transfer}},
+    note = {commit xxxxxxx}
+  }
+```
+
 ## Dependencies
 * opencv 3.20
 * numpy
 * tensorflow 1.10
-* progressbar2
 * python 3

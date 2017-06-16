@@ -27,7 +27,7 @@ flags.DEFINE_integer('iterations', 100, 'Number iterations')
 flags.DEFINE_integer('resize', -1, 'Resize to according to height')
 flags.DEFINE_float('weight_denoise', 0.3, 'Weight Denoise')
 flags.DEFINE_float('step_size', 10.0, 'Step size of gradient')
-flags.DEFINE_string('model', 'VGG16', 'Models: VGG16, AlexNet, ResNet-L152, ResNet-L101, ResNet-L50')
+flags.DEFINE_string('model', 'VGG19', 'Models: VGG16, AlexNet, ResNet-L152, ResNet-L101, ResNet-L50')
 
 # Get directories of our nets
 vgg16.data_dir = 'vgg16/'
@@ -157,8 +157,8 @@ def create_denoise_loss(model):
 def transform_network(session, model, content_image):
     return
 
-def spatial_multi_style_transfer(session, model, content_images, style_images, masks, content_layer_ids, style_layer_ids, weight_contents,
-                        weight_styles, weight_denoise=0.3, num_iterations=100, step_size=9.0, style_step_size=10.5):
+def spatial_multi_style_transfer(session, model, content_images, style_images, content_layer_ids, style_layer_ids, weight_contents,
+                        weight_styles, masks=None, weight_denoise=0.3, num_iterations=100, step_size=9.0, style_step_size=10.5):
     assert len(style_images) == len(style_layer_ids), "Mismatch between number of style images and number of subset style layers"
 
     # Print Layers
@@ -175,8 +175,12 @@ def spatial_multi_style_transfer(session, model, content_images, style_images, m
                     for im, lays in zip(content_images, content_layer_ids) ]
 
     # Multi Style Loss
-    loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays, style_mask=mask)
-                    for im, lays, mask in zip(style_images, style_layer_ids, masks) ]
+    if masks != None:
+        loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays, style_mask=mask)
+                        for im, lays, mask in zip(style_images, style_layer_ids, masks) ]
+    else:
+        loss_styles = [ create_style_loss(session=session, model=model, style_image=im, layer_ids=lays, style_mask=None)
+                        for im, lays in zip(style_images, style_layer_ids) ]
 
     # Denoising Loss
     loss_denoise = create_denoise_loss(model)
@@ -461,13 +465,13 @@ if __name__ == '__main__':
 
     # Define your loss layer locations and styles
     # Messing around here
-    content_layers = [[5]]
-    multi_content = [contents["ed"]]
-    weight_contents = [1.0]
+    content_layers = [[12]]# 0,2,4,8,12
+    multi_content = [contents["rick-and-morty"]]
+    weight_contents = [10.0]
 
-    style_layers = [ list(range(16)), list(range(16))]
-    multi_style = [styles["flowers"], styles["monsters"]]
-    weight_styles = [10.0,10.0]
+    style_layers = [ list(range(4)), list(range(4,12)), list(range(12,15))]
+    multi_style = [styles["asheville"], styles["spaghetti"], styles["polygon"]]
+    weight_styles = [10.0,10.0, 10.0]
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
@@ -478,10 +482,9 @@ if __name__ == '__main__':
 
         # This may be an issue with scaling...
         multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
+    else:
+        multi_style = [cv2.resize(style, (multi_content[0].shape[1], (multi_content[0].shape[0]))) for style in multi_style]
 
-
-    mask1 = cv2.resize((cv2.imread("./masks/radial_bw.jpg",0).astype(np.float32)/255.0),(multi_content[0].shape[1], multi_content[0].shape[0]))
-    mask2 = 1.0 - mask1
 
     """
     mask2 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
@@ -489,9 +492,6 @@ if __name__ == '__main__':
     mask1 = np.zeros((multi_content[0].shape[0], multi_content[0].shape[1])).astype(np.float32)
     mask1[:,:int(mask1.shape[1]/2 - 1)] = 1.0
     """
-
-
-    masks = [mask1, mask2]
 
     ###########################################
     # Instantiate the models in a session
@@ -526,7 +526,7 @@ if __name__ == '__main__':
                             num_iterations= FLAGS.iterations)
     """
     # Input must be RGB images, Output is BGR
-    mixed = spatial_multi_style_transfer(sess,  model, multi_content, multi_style, masks, content_layers, style_layers, weight_contents, weight_styles,
+    mixed = spatial_multi_style_transfer(sess,  model, multi_content, multi_style, content_layers, style_layers, weight_contents, weight_styles,
                             weight_denoise= FLAGS.weight_denoise,
                             num_iterations= FLAGS.iterations,
                             step_size=      FLAGS.step_size)
