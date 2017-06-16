@@ -467,11 +467,11 @@ if __name__ == '__main__':
     # Messing around here
     content_layers = [[12]]# 0,2,4,8,12
     multi_content = [contents["rick-and-morty"]]
-    weight_contents = [10.0]
+    weight_contents = [12.0]
 
     style_layers = [ list(range(4)), list(range(4,12)), list(range(12,15))]
     multi_style = [styles["asheville"], styles["spaghetti"], styles["polygon"]]
-    weight_styles = [10.0,10.0, 10.0]
+    weight_styles = [10.0,20.0, 10.0]
 
     # Resize to first content shape, also resizes style
     if FLAGS.resize > 0:
