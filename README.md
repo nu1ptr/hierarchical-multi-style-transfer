@@ -13,7 +13,7 @@
 
 ## Supported Models
 * AlexNet, npy (Not Fully Convolutional)
-* VGG16, tfmodel
+* VGG16, tfmodel ( Need to fix support )
 * VGG19, npy (BEST RESULTS WITH THIS ONE)
 
 ## Issues
@@ -23,9 +23,9 @@
 
 ### Citation
 ```
-  @misc{engstrom2016faststyletransfer,
+  @misc{hierarchicalmultistyletransfer,
     author = {Jason Quach},
-    title = {Hierarchical Style Transfer},
+    title = {Hierarchical Multi-Style Transfer},
     year = {2017},
     howpublished = {\url{https://github.com/nu1ptr/hierarchical-multi-style-transfer}},
     note = {commit xxxxxxx}
